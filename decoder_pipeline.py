@@ -1,7 +1,9 @@
 
 from pathlib import Path
+import numpy as np
 from scipy.io import loadmat
-from scipy.signal import butter, sosfiltfilt
+from scipy.signal import butter, sosfiltfilt, freqz 
+from statsmodels.regression.linear_model import burg
 
 all_trials = []
 
@@ -48,6 +50,64 @@ for participant in [1, 2]:
             test_trials.append(trial)
         else:
             train_trials.append(trial)
+
+#extract avg power band in 10.5-13.5 Hz for C3 and C4 channels
+#output: [log(avg_power_C3), log(avg_power_C4)] for each trial
+def extract_features(trial, band=(10.5, 13.5)):
+    eeg = trial["eeg"]
+    labels = trial["labels"]
+
+    c3 = labels.index("C3")
+    c4 = labels.index("C4")
+
+    c3_neighbors = [labels.index(ch) for ch in ["FC3", "CP3", "C1", "C5"]]
+    c4_neighbors = [labels.index(ch) for ch in ["FC4", "CP4", "C2", "C6"]]
+
+    filtered = np.array([
+        eeg[c3] - eeg[c3_neighbors].mean(axis=0),
+        eeg[c4] - eeg[c4_neighbors].mean(axis=0)
+    ])
+
+    window_size = 160
+    step_size = 40
+    freqs = np.arange(0, 30.1, 0.2)
+    powers = []
+
+    for i in range(0, filtered.shape[1] - window_size + 1, step_size):
+        window = filtered[:, i:i + window_size]
+        psd = []
+
+        for channel in window:
+            ar, variance = burg(channel, order=8)
+
+            if not np.isfinite(variance) or variance <= 0:
+                break
+
+            _, response = freqz([1], np.r_[1, -ar], worN=freqs, fs=1000)
+            psd.append(variance * np.abs(response) ** 2)
+
+        if len(psd) != 2:
+            continue
+
+        band_idx = (freqs >= band[0]) & (freqs <= band[1])
+        powers.append(np.mean(np.array(psd)[:, band_idx], axis=1))
+
+    if not powers:
+        return np.array([np.nan, np.nan])
+
+    return np.log(np.mean(powers, axis=0) + 1e-12)
+
+x_train = np.array([extract_features(t) for t in train_trials])
+x_test = np.array([extract_features(t) for t in test_trials])
+
+y_train = np.array([t["target"] for t in train_trials])
+y_test = np.array([t["target"] for t in test_trials])
+
+valid = np.isfinite(x_train).all(axis=1)
+
+x_train = x_train[valid]
+y_train = y_train[valid]
+
 
 
 
