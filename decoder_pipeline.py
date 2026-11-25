@@ -5,6 +5,9 @@ from scipy.io import loadmat
 from scipy.signal import butter, sosfiltfilt, freqz 
 from statsmodels.regression.linear_model import burg
 
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score
+
 all_trials = []
 
 # Load data
@@ -35,10 +38,11 @@ for participant, session in enumerate(["Session 1", "Session 2"], start=1):
                 "target": int(target),
                 "outcome": int(outcome),
                 "labels": [labels[i] for i in eeg_indices],
+                "fs": fs,
             })
 
-            train_trials = []
-            test_trials = []
+train_trials = []
+test_trials = []
 
 # Split trials into training and testing sets
 for participant in [1, 2]:
@@ -83,7 +87,7 @@ def extract_features(trial, band=(10.5, 13.5)):
             if not np.isfinite(variance) or variance <= 0:
                 break
 
-            _, response = freqz([1], np.r_[1, -ar], worN=freqs, fs=1000)
+            _, response = freqz([1], np.r_[1, -ar], worN=freqs, fs=trial["fs"])
             psd.append(variance * np.abs(response) ** 2)
 
         if len(psd) != 2:
@@ -107,6 +111,19 @@ valid = np.isfinite(x_train).all(axis=1)
 
 x_train = x_train[valid]
 y_train = y_train[valid]
+train_trials = [t for t, keep in zip(train_trials, valid) if keep]
+
+for participant in [1, 2]:
+    train_idx = np.array([t["participant"] == participant for t in train_trials])
+    test_idx = np.array([t["participant"] == participant for t in test_trials])
+
+    model = LogisticRegression()
+    model.fit(x_train[train_idx], y_train[train_idx])
+
+    predictions = model.predict(x_test[test_idx])
+    accuracy = accuracy_score(y_test[test_idx], predictions)
+
+    print(f"Participant {participant}: {accuracy:.2%}")
 
 
 
