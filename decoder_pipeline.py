@@ -35,4 +35,19 @@ for participant, session in enumerate(["Session 1", "Session 2"], start=1):
                 "labels": [labels[i] for i in eeg_indices],
             })
 
-print("Total LR trials:", len(all_trials))
+            train_trials = []
+            test_trials = []
+
+# Split trials into training and testing sets
+for participant in [1, 2]:
+    trials = [t for t in all_trials if t["participant"] == participant]
+    runs = sorted(set(t["run"] for t in trials))
+
+    for trial in trials:
+        if trial["run"] == runs[-1]:
+            test_trials.append(trial)
+        else:
+            train_trials.append(trial)
+
+
+
