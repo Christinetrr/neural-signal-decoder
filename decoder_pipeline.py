@@ -123,8 +123,60 @@ for participant in [1, 2]:
     predictions = model.predict(x_test[test_idx])
     accuracy = accuracy_score(y_test[test_idx], predictions)
 
-    print(f"Participant {participant}: {accuracy:.2%}")
 
 
 
+bands = [(8, 11), (11, 14), (14, 17), (17, 20), (20, 30)]
 
+best_bands = {}
+
+for participant in [1, 2]:
+    trials = [t for t in train_trials if t["participant"] == participant]
+    runs = sorted(set(t["run"] for t in trials))
+
+    train = [t for t in trials if t["run"] != runs[-1]]
+    val = [t for t in trials if t["run"] == runs[-1]]
+
+    best_accuracy = -1
+
+    for band in bands:
+        x = np.array([extract_features(t, band) for t in train])
+        y = np.array([t["target"] for t in train])
+
+        x_val = np.array([extract_features(t, band) for t in val])
+        y_val = np.array([t["target"] for t in val])
+
+        model = LogisticRegression()
+        model.fit(x, y)
+
+        accuracy = accuracy_score(y_val, model.predict(x_val))
+        print(f"Participant {participant}, {band} Hz: {accuracy:.2%}")
+
+        if accuracy > best_accuracy:
+            best_accuracy = accuracy
+            best_bands[participant] = band
+
+    print(f"Best band for Participant {participant}: {best_bands[participant]}")
+
+
+
+# Evaluate selected frequency bands
+for participant in [1, 2]:
+    train = [t for t in train_trials if t["participant"] == participant]
+    test = [t for t in test_trials if t["participant"] == participant]
+
+    band = best_bands[participant]
+
+    x = np.array([extract_features(t, band) for t in train])
+    y = np.array([t["target"] for t in train])
+
+    x_eval = np.array([extract_features(t, band) for t in test])
+    y_eval = np.array([t["target"] for t in test])
+
+    model = LogisticRegression()
+    model.fit(x, y)
+
+    predictions = model.predict(x_eval)
+    accuracy = accuracy_score(y_eval, predictions)
+
+    print(f"Participant {participant}, {band} Hz: {accuracy:.2%}")
